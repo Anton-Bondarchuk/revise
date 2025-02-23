@@ -1,0 +1,1 @@
+https://github.com/tediousdent/CasaOS-AppManagement/blob/master/service/appstore.go

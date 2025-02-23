@@ -6,4 +6,4 @@ help:
 
 
 start:
-	-  docker compose up && go run main.go --config=./config/config.yml 
+	- cd docker && docker compose up && go run main.go --config=./config/config.yml 
