@@ -1,4 +1,4 @@
-package main 
+package main
 
 import (
 	"fmt"
@@ -8,27 +8,28 @@ import (
 	"syscall"
 
 	"revise/internal/config"
+	"revise/internal/service"
+	"revise/internal/storage"
+	"revise/internal/handlers"
+
 	"github.com/gin-gonic/gin"
 )
 
 
 func main() {
 	config := config.MustLoad()
-	db, err := New(config.StorageConfig)
+	db, err := storage.New(config.StorageConfig)
 	if err != nil {
 		log.Fatalf("Error connecting to the database: %v", err)
 	}
 	defer db.Close()
+	service := service.New(log.Default(), db)
+	handlers := handlers.New(*service)
 
 	router := gin.Default()
 
-	router.Use(func(c *gin.Context) {
-		c.Set("db", db)
-		c.Next()
-	})
-
-	router.GET("/documents", getDocuments)
-	router.POST("/documents", saveDocument)
+	router.GET("/documents", handlers.GetDocuments)
+	router.POST("/documents", handlers.SaveDocument)
 
 	go func() {
 		router.Run(":8080")
