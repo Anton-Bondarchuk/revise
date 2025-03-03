@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"revise/internal/domain/models"
-	"revise/internal/service"
+	"revise/internal/service/document"
 
 	"github.com/gin-gonic/gin"
 )

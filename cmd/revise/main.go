@@ -8,7 +8,7 @@ import (
 	"syscall"
 
 	"revise/internal/config"
-	"revise/internal/service"
+	"revise/internal/service/document"
 	"revise/internal/storage"
 	"revise/internal/handlers"
 
