@@ -16,6 +16,18 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
+func main() {
+	router := gin.Default() 
+
+	router.GET("/", func(ctx *gin.Context) {
+		ctx.HTML(http.StatusOK, "/Users/anton.bondarchuk/revise/templates/index.html", nil)
+	})
+
+	router.POST("/auth/google/login", OauthGoogleByLogin)
+	router.POST("/auth/google/callback", OauthGoogleCallback)
+}
+
+
 var googleOauthConfig = &oauth2.Config{
 	RedirectURL:  "http://localhost:8000/auth/google/callback",
 	ClientID:     os.Getenv("GOOGLE_OAUTH_CLIENT_ID"),
@@ -25,14 +37,6 @@ var googleOauthConfig = &oauth2.Config{
 }
 
 const oauthGoogleUrlAPI = "https://www.googleapis.com/oauth2/v2/userinfo?access_token="
-
-func main() {
-	router := gin.Default() 
-
-	router.POST("/auth/google/login", OauthGoogleByLogin)
-	router.POST("/auth/google/callback", OauthGoogleCallback)
-}
-
 
 func OauthGoogleByLogin(c *gin.Context) {
 	// ctx := c.Request.Context()
