@@ -12,6 +12,7 @@ import (
 type Config struct {
 	Env            string     `yaml:"env" env-default:"local"`
 	StorageConfig  StorageConfig     `yaml:"storage" env-required:"true"`
+	OauthConfig 
 }
 
 type StorageConfig struct {
@@ -21,6 +22,15 @@ type StorageConfig struct {
 	Password string `yml:"password"`
 	Database string `yml:"database"`
 }
+
+type OauthConfig struct {
+	RedirectURI  string `yaml:"redirect_uri" env-default:"/auth/google/callback"`
+	ClientID     string `yaml:"client_id" env-required:"true"`
+	ClientSecret string `yaml:"client_secter" env-required:"true"`
+	Scopes       []string `yaml:"scopes" env-default:"https://www.googleapis.com/auth/userinfo.email"`
+	GoogleAuthURL string `yaml:"google_auth_url" env-default:"https://www.googleapis.com/oauth2/v2/userinfo?access_token="`
+}
+
 
 func MustLoad() *Config {
 	configPath := fetchConfigPath()

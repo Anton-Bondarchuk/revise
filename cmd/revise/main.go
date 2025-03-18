@@ -24,6 +24,7 @@ import (
 )
 
 
+
 func main() {
 	config := config.MustLoad()
 	db, err := storage.New(config.StorageConfig)
@@ -31,57 +32,82 @@ func main() {
 		log.Fatalf("Error connecting to the database: %v", err)
 	}
 	defer db.Close()
-	service := service.New(log.Default(), db)
-	handlers := handlers.New(*service)
+
+	docService := service.New(log.Default(), db)
+	docHandlers := handlers.New(*docService)
 
 	router := gin.Default()
 
-	router.GET("/documents", handlers.GetDocuments)
-	router.POST("/documents", handlers.SaveDocument)
+	router.GET("/documents", docHandlers.GetDocuments)
+	router.POST("/documents", docHandlers.SaveDocument)
 
 	/* 
 	* Auth
 	*/
-	router.POST("/auth/google/login", OauthGoogleByLogin)
-	router.POST("/auth/google/callback", OauthGoogleCallback)
+	oauthConfig := NewGoogleOAuthConfig(config.OauthConfig)
+	oauthHandlers := New(*oauthConfig, config.OauthConfig.GoogleAuthURL)
+
+	router.GET("/auth/google/login", oauthHandlers.OauthGoogleLogin)      // Changed to GET for OAuth flow
+	router.GET("/auth/google/callback", oauthHandlers.OauthGoogleCallback)
+
+	// TODO: add server config and server port
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: router,
+	}
+
 	go func() {
-		router.Run(":8080")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("ListenAndServe: %v", err)
+		}
 	}()
-	/* 
-	* Auth
-	*/
 
-	
-	// Graceful shutdown
-	
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
-
 	<-quit
 
-	fmt.Println("Shutting down server...")
+	log.Println("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatal("Server forced to shutdown:", err)
+	}
+	log.Println("Server exiting")
 }
 
 
-var googleOauthConfig = &oauth2.Config{
-	RedirectURL:  "http://localhost:8000/auth/google/callback",
-	ClientID:     os.Getenv("GOOGLE_OAUTH_CLIENT_ID"),
-	ClientSecret: os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
-	Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email"},
-	Endpoint:     google.Endpoint,
+type OauthHandlers struct {
+	config oauth2.Config
+	googleAuthURL string
 }
 
-const oauthGoogleUrlAPI = "https://www.googleapis.com/oauth2/v2/userinfo?access_token="
+func New(config oauth2.Config, googleAuthURL string) *OauthHandlers {
+	return &OauthHandlers{
+		config: config,
+		googleAuthURL: googleAuthURL,
+	}
+}
 
-func OauthGoogleByLogin(c *gin.Context) {
-	// ctx := c.Request.Context()
+func NewGoogleOAuthConfig(cfg config.OauthConfig) *oauth2.Config {
+    return &oauth2.Config{
+		// TODO: add server config
+        RedirectURL:  "http://localhost:8000" + cfg.RedirectURI,
+        ClientID:     cfg.ClientID,
+        ClientSecret: cfg.ClientSecret,
+        Scopes:       cfg.Scopes,
+        Endpoint:     google.Endpoint,
+    }
+}
 
+
+func (h *OauthHandlers) OauthGoogleLogin(c *gin.Context) {
 	oauthState := generateStateOauthCookie(c)
-	redirectUrl  := googleOauthConfig.AuthCodeURL(oauthState)
+	redirectUrl := h.config.AuthCodeURL(oauthState)
 	c.Redirect(http.StatusTemporaryRedirect, redirectUrl)
 }
 
-func OauthGoogleCallback(c *gin.Context) {
+func (h *OauthHandlers) OauthGoogleCallback(c *gin.Context) {
 	oauthState, _ := c.Cookie("oauthstate")
 
 	if c.Request.FormValue("state") != oauthState {
@@ -90,7 +116,8 @@ func OauthGoogleCallback(c *gin.Context) {
 		return
 	}
 
-	data, err := getUserDataFromGoogle(c.Request.FormValue("code"))
+	// TODO: rework googleAuthURL -> userInfoURL
+	data, err := getUserDataFromGoogle(c, &h.config, h.googleAuthURL)
 	if err != nil {
 		log.Println(err.Error())
 		c.Redirect(http.StatusTemporaryRedirect, "/")
@@ -98,7 +125,8 @@ func OauthGoogleCallback(c *gin.Context) {
 	}
 
 	// TODO: GetOrCreate User in your db.
-	c.String(http.StatusOK, "user info: %s\n", data)
+	// TODO: Process user data and create session/JWT
+	c.JSON(http.StatusOK, gin.H{"user": string(data)})
 }
 
 
@@ -115,19 +143,21 @@ func generateStateOauthCookie(c *gin.Context) string {
 	return state
 }
 
-func getUserDataFromGoogle(code string) ([]byte, error) {
+func getUserDataFromGoogle(c *gin.Context, config *oauth2.Config, userInfoURL string) ([]byte, error) {
 	// TODO: invistigate Exchange fn logic
-	// : check context correct handling
-	// : move oauthGoogleUrlAPI to config
-	token, err := googleOauthConfig.Exchange(context.Background(), code)
+	code := c.Query("code")
+	token, err := config.Exchange(c, code)
 	if err != nil {
 		return nil, fmt.Errorf("code exchange wrong: %s", err.Error())
 	}
-	resp, err := http.Get(oauthGoogleUrlAPI + token.AccessToken)
+
+	client := config.Client(c, token)
+	resp, err := client.Get(userInfoURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting user info: %s", err.Error())
 	}
 	defer resp.Body.Close()
+	
 	var content []byte 
 	err = json.NewDecoder(resp.Body).Decode(&content)
 	if err != nil {

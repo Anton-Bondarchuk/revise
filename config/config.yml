@@ -1,5 +1,9 @@
 env: "local"
 
+server: 
+  host: "localhost"
+  port: 8080
+
 storage:
   host: "localhost"
   port: 5432
@@ -8,5 +12,13 @@ storage:
   database: "postgres"
 
 oauth:
+  redirect_uri: "/auth/google/callback"
+  client_id: ""
+  client_secter: ""
+  scopes: 
+    - "https://www.googleapis.com/auth/userinfo.email"
+
+  google_auth_url: "https://www.googleapis.com/oauth2/v2/userinfo?access_token="
+
   
   
